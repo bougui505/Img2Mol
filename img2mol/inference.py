@@ -33,8 +33,6 @@ try:
         from cddd.inference import InferenceModel as CDDDInferenceModel
 except ImportError:
     print("Local CDDD installation has not been found.")
-
-
 """
 Inference Class for Img2Mol Model.
 By default, the class instantiation will not use any model checkpoint.
@@ -48,12 +46,10 @@ class Img2MolInference(object):
     """
     Inference Class
     """
-    def __init__(
-        self,
-        model_ckpt: Optional[str] = None,
-        device: str = "cuda:0" if torch.cuda.is_available() else "cpu",
-        local_cddd: bool = None
-    ):
+    def __init__(self,
+                 model_ckpt: Optional[str] = None,
+                 device: str = "cuda:0" if torch.cuda.is_available() else "cpu",
+                 local_cddd: bool = None):
         super(Img2MolInference, self).__init__()
         if local_cddd:
             self.cddd_inference_model = CDDDInferenceModel()
@@ -75,6 +71,7 @@ class Img2MolInference(object):
     """
     Class methods for image preprocessing
     """
+
     @classmethod
     def read_imagefile(cls, filepath: str) -> Image.Image:
         img = Image.open(filepath, "r")
@@ -95,8 +92,7 @@ class Img2MolInference(object):
         new_size = tuple([int(x * ratio) for x in old_size])
         img = img.resize(new_size, Image.BICUBIC)
         new_img = Image.new("L", (desired_size, desired_size), "white")
-        new_img.paste(img, ((desired_size - new_size[0]) // 2,
-                            (desired_size - new_size[1]) // 2))
+        new_img.paste(img, ((desired_size - new_size[0]) // 2, (desired_size - new_size[1]) // 2))
 
         new_img = ImageOps.expand(new_img, int(np.random.randint(5, 25, size=1)), "white")
         return new_img
@@ -104,35 +100,34 @@ class Img2MolInference(object):
     @classmethod
     def transform_image(cls, image: Image):
         image = cls.fit_image(image)
-        img_PIL = transforms.RandomRotation((-15, 15), resample=3, expand=True, center=None, fill=255)(image)
+        img_PIL = transforms.RandomRotation((-15, 15), expand=True, center=None, fill=255)(image)
         img_PIL = transforms.ColorJitter(brightness=[0.75, 2.0], contrast=0, saturation=0, hue=0)(img_PIL)
         shear_value = np.random.uniform(0.1, 7.0)
         shear = random.choice([[0, 0, -shear_value, shear_value], [-shear_value, shear_value, 0, 0],
                                [-shear_value, shear_value, -shear_value, shear_value]])
-        img_PIL = transforms.RandomAffine(0, translate=None, scale=None,
-                                          shear=shear, resample=3, fillcolor=255)(img_PIL)
+        img_PIL = transforms.RandomAffine(0, translate=None, scale=None, shear=shear, resample=3,
+                                          fillcolor=255)(img_PIL)
         img_PIL = ImageEnhance.Contrast(ImageOps.autocontrast(img_PIL)).enhance(2.0)
         img_PIL = transforms.Resize((224, 224), interpolation=3)(img_PIL)
         img_PIL = ImageOps.autocontrast(img_PIL)
         img_PIL = transforms.ToTensor()(img_PIL)
         return img_PIL
 
-    def read_image_to_tensor(self, filepath: str,
-                             repeats: int = 50):
+    def read_image_to_tensor(self, filepath: str, repeats: int = 50):
         extension = filepath.split(".")[-1] in ("jpg", "jpeg", "png")
         if not extension:
             return "Image must be jpg or png format!"
         image = self.read_imagefile(filepath)
-        images = torch.cat([torch.unsqueeze(self.transform_image(image), 0)
-                            for _ in range(repeats)], dim=0)
+        images = torch.cat([torch.unsqueeze(self.transform_image(image), 0) for _ in range(repeats)], dim=0)
         images = images.to(self.device)
         return images
 
-    def __call__(self,
-                 filepath: str,
-                 cddd_server: CDDDRequest = None,
-                 return_cddd: bool = False,
-                 ) -> dict:
+    def __call__(
+            self,
+            filepath: str,
+            cddd_server: CDDDRequest = None,
+            return_cddd: bool = False,
+    ) -> dict:
         images = self.read_image_to_tensor(filepath, repeats=50)
         with torch.no_grad():
             cddd = self.model(images).detach().cpu().numpy()
@@ -157,21 +152,16 @@ class Img2MolInference(object):
         if not return_cddd:
             cddd = None
 
-        return {"filepath": filepath,
-                "cddd": cddd, "smiles": can_smiles, "mol": can_mol
-                }
+        return {"filepath": filepath, "cddd": cddd, "smiles": can_smiles, "mol": can_mol}
 
-    def predict(self, filepath: str,
-                cddd_server: CDDDRequest,
-                return_cddd: bool = False) -> dict:
+    def predict(self, filepath: str, cddd_server: CDDDRequest, return_cddd: bool = False) -> dict:
         return self.__call__(filepath, cddd_server, return_cddd)
 
 
 if __name__ == "__main__":
 
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    img2mol = Img2MolInference(model_ckpt=None,
-                               device=device)
+    img2mol = Img2MolInference(model_ckpt=None, device=device)
     cddd_server = CDDDRequest(host="http://ec2-18-157-240-87.eu-central-1.compute.amazonaws.com")
 
     example = "examples/example1.png"
